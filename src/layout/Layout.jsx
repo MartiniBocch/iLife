@@ -57,53 +57,65 @@ function Layout() {
 const styles = {
   appShell: {
     display: 'grid',
-    gridTemplateColumns: '280px 1fr',
+    gridTemplateColumns: '260px 1fr',
     minHeight: '100vh',
-    background: 'hsl(var(--background))',
-    color: 'hsl(var(--foreground))',
+    background: '#f8fafc', // Light slate canvas for page content
+    color: '#0f172a',
   },
   sidebar: {
-    borderRight: '1px solid hsl(var(--border))',
+    background: '#0f172a', // Dark slate background for sidebar
+    color: '#f8fafc',
+    borderRight: '1px solid #1e293b',
     padding: '2rem 1.25rem',
-    background: 'hsl(var(--card))',
     position: 'sticky',
     top: 0,
     height: '100vh',
+    boxSizing: 'border-box',
+    display: 'flex',
+    flexDirection: 'column',
+    boxShadow: '4px 0 24px rgba(0, 0, 0, 0.08)',
   },
   brandBlock: {
     marginBottom: '2rem',
+    paddingLeft: '0.5rem',
   },
   brandTitle: {
     margin: 0,
-    fontSize: '1.75rem',
+    fontSize: '1.6rem',
     fontWeight: 700,
+    letterSpacing: '-0.02em',
+    color: '#ffffff',
   },
   brandText: {
-    margin: '0.5rem 0 0',
-    color: 'hsl(var(--muted-foreground))',
-    fontSize: '0.95rem',
+    margin: '0.35rem 0 0',
+    color: '#94a3b8',
+    fontSize: '0.875rem',
   },
   nav: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '0.75rem',
+    gap: '0.375rem',
   },
   navLink: {
     display: 'flex',
     alignItems: 'center',
     gap: '0.75rem',
     textDecoration: 'none',
-    color: 'hsl(var(--foreground))',
-    padding: '0.9rem 1rem',
-    borderRadius: '1rem',
-    transition: 'all 0.2s ease',
+    color: '#94a3b8', // Subtle slate-gray for inactive items
+    padding: '0.75rem 1rem',
+    borderRadius: '0.75rem',
+    fontSize: '0.938rem',
+    fontWeight: 500,
+    transition: 'all 0.15s ease-in-out',
   },
   navLinkActive: {
-    background: 'hsl(var(--primary))',
-    color: 'hsl(var(--primary-foreground))',
+    background: '#1e293b', // Slightly lighter dark tone to highlight active pill
+    color: '#38bdf8', // Vibrant sky-blue text & icon for active page
+    fontWeight: 600,
   },
   main: {
     padding: '2rem',
+    overflowY: 'auto',
   },
 }
 

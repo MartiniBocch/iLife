@@ -6,15 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { GraduationCap, BookOpen, Star, FolderOpen, Link as LinkIcon, Edit2 } from "lucide-react";
 import Project from "@/entities/Project";
 import useAppLevelAuth from "@/hooks/useAppLevelAuth";
-import { Button } from "@/components/ui/button";
 
 export default function EducationPage() {
-  const { isLoggedIn } = useAppLevelAuth();
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState([]);
 
   useEffect(() => {
-    if (!isLoggedIn) return;
     const fetchProjects = async () => {
       try {
         const data = await Project.list("deadline:asc");
@@ -26,9 +23,8 @@ export default function EducationPage() {
       }
     };
     fetchProjects();
-  }, [isLoggedIn]);
+  }, []);
 
-  if (!isLoggedIn) return null;
 
   const exams = projects.filter(p => p.type === 'exam');
   const portfolio = projects.filter(p => p.type === 'portfolio');

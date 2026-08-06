@@ -1,210 +1,188 @@
-import { useEffect, useMemo, useState } from 'react'
-import { format } from 'date-fns'
-import { CheckCircle2, Circle, ListTodo } from 'lucide-react'
-import Task from '../entities/Task'
+import React, { useEffect, useMemo, useState } from 'react';
+import { format } from 'date-fns';
+import { CheckCircle2, Circle, ListTodo, Calendar, Clock } from 'lucide-react';
+import Task from '@/entities/Task';
 
-function TasksPage() {
-  const [tasks, setTasks] = useState([])
-  const [loading, setLoading] = useState(true)
+export default function TasksPage() {
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchTasks = async () => {
       try {
-        const data = await Task.list('dueDate:asc')
-        setTasks(data || [])
+        const data = await Task.list('dueDate:asc');
+        setTasks(data || []);
       } catch (error) {
-        console.error(error)
+        console.error('Failed to fetch tasks:', error);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
+    };
 
-    fetchTasks()
-  }, [])
+    fetchTasks();
+  }, []);
 
-  const todayStr = format(new Date(), 'yyyy-MM-dd')
+  const todayStr = format(new Date(), 'dd-MM-yyyy');
 
-  const { todayTasks, otherTasks } = useMemo(() => {
+  // Split tasks into Today vs. Upcoming / Other
+  const { todayTasks, upcomingTasks } = useMemo(() => {
     return {
       todayTasks: tasks.filter((task) => task.dueDate === todayStr),
-      otherTasks: tasks.filter((task) => task.dueDate !== todayStr),
-    }
-  }, [tasks, todayStr])
+      upcomingTasks: tasks.filter((task) => task.dueDate !== todayStr),
+    };
+  }, [tasks, todayStr]);
 
+  // Toggle completion in local state + persist back to server/entity
   const toggleTask = async (task) => {
-    const updatedTask = { ...task, completed: !task.completed }
+    const nextStatus = !task.completed;
 
-    setTasks((currentTasks) =>
-      currentTasks.map((item) =>
-        item.id === task.id ? updatedTask : item,
-      ),
-    )
+    setTasks((prev) =>
+      prev.map((item) =>
+        item.id === task.id ? { ...item, completed: nextStatus } : item
+      )
+    );
 
     try {
-      await Task.update(task.id, { completed: !task.completed })
+      await Task.update(task.id, { completed: nextStatus });
     } catch (error) {
-      console.error(error)
+      console.error('Failed to update task:', error);
     }
-  }
+  };
 
-  const TaskItem = ({ task }) => (
-    <button
-      type="button"
+  // Reusable card styling matching the Calendar Timeline look
+  const TaskCard = ({ task }) => (
+    <div
       onClick={() => toggleTask(task)}
-      style={{
-        ...styles.taskItem,
-        ...(task.completed ? styles.taskDone : {}),
-      }}
+      className={`group cursor-pointer bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60 p-4 shadow-sm hover:shadow-md transition-all duration-200 flex items-start gap-3 ${task.completed ? 'opacity-70' : ''
+        }`}
     >
-      {task.completed ? (
-        <CheckCircle2 size={20} color="hsl(var(--primary))" />
-      ) : (
-        <Circle size={20} color="hsl(var(--muted-foreground))" />
-      )}
+      <button
+        type="button"
+        className="mt-0.5 text-muted-foreground group-hover:scale-110 transition-transform"
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleTask(task);
+        }}
+      >
+        {task.completed ? (
+          <CheckCircle2 className="h-5 w-5 text-green-500 fill-green-50" />
+        ) : (
+          <Circle className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
+        )}
+      </button>
 
-      <div style={styles.taskContent}>
-        <span
-          style={{
-            ...styles.taskTitle,
-            ...(task.completed ? styles.taskTitleDone : {}),
-          }}
+      <div className="flex-1 min-w-0">
+        <div
+          className={`font-semibold text-base transition-colors ${task.completed ? 'line-through text-muted-foreground' : 'text-foreground'
+            }`}
         >
           {task.title}
-        </span>
-        {task.dueDate && (
-          <span style={styles.taskMeta}>Due: {task.dueDate}</span>
+        </div>
+
+        {task.description && (
+          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+            {task.description}
+          </p>
         )}
+
+        <div className="flex items-center gap-2 mt-3 flex-wrap">
+          {task.category && (
+            <span
+              className={`text-xs px-2.5 py-1 rounded-md font-medium capitalize ${task.category === 'personal'
+                  ? 'bg-pink-100 text-pink-700'
+                  : task.category === 'work'
+                    ? 'bg-blue-100 text-blue-700'
+                    : task.category === 'education'
+                      ? 'bg-yellow-100 text-yellow-700'
+                      : 'bg-primary/10 text-primary'
+                }`}
+            >
+              {task.category}
+            </span>
+          )}
+
+          {task.dueDate && (
+            <span className="text-xs text-muted-foreground flex items-center gap-1 bg-slate-100/80 px-2 py-1 rounded-md">
+              <Clock className="h-3 w-3" />
+              {task.dueDate === todayStr
+                ? 'Today'
+                : format(new Date(task.dueDate), 'MMM d, yyyy')}
+            </span>
+          )}
+        </div>
       </div>
-    </button>
-  )
+    </div>
+  );
 
   return (
-    <section style={styles.page}>
-      <header style={styles.header}>
-        <div style={styles.headerIcon}>
-          <ListTodo size={24} />
+    <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <div className="h-12 w-12 rounded-2xl bg-primary/15 flex items-center justify-center text-primary">
+          <ListTodo className="h-6 w-6" />
         </div>
         <div>
-          <h2 style={styles.title}>Tasks</h2>
-          <p style={styles.subtitle}>
-            Manage all your personal, work, and educational tasks for the day.
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Tasks</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage your daily to-dos and upcoming activities.
           </p>
         </div>
-      </header>
+      </div>
 
       {loading ? (
-        <p style={styles.infoText}>Loading tasks...</p>
+        <div className="text-center py-12 text-muted-foreground">
+          Loading tasks...
+        </div>
       ) : (
-        <div style={styles.grid}>
-          <section style={styles.card}>
-            <h3 style={styles.cardTitle}>Today</h3>
-            {todayTasks.length === 0 ? (
-              <p style={styles.infoText}>No tasks due today. You&apos;re all caught up!</p>
-            ) : (
-              <div style={styles.list}>
-                {todayTasks.map((task) => (
-                  <TaskItem key={task.id} task={task} />
-                ))}
-              </div>
-            )}
-          </section>
+        /* Two Columns Layout */
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Column 1: Today's Tasks */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-border">
+              <Calendar className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-semibold">Today</h2>
+              <span className="ml-auto text-xs bg-primary/10 text-primary px-2.5 py-0.5 rounded-full font-medium">
+                {todayTasks.length}
+              </span>
+            </div>
 
-          <section style={styles.card}>
-            <h3 style={styles.cardTitle}>Upcoming</h3>
-            {otherTasks.length === 0 ? (
-              <p style={styles.infoText}>No upcoming tasks yet.</p>
-            ) : (
-              <div style={styles.list}>
-                {otherTasks.map((task) => (
-                  <TaskItem key={task.id} task={task} />
-                ))}
-              </div>
-            )}
-          </section>
+            <div className="space-y-3">
+              {todayTasks.length > 0 ? (
+                todayTasks.map((task) => <TaskCard key={task.id} task={task} />)
+              ) : (
+                <div className="p-8 text-center bg-white/40 rounded-2xl border border-dashed border-border/80">
+                  <p className="text-sm text-muted-foreground">
+                    No tasks scheduled for today.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Column 2: Upcoming Tasks */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-border">
+              <Clock className="h-5 w-5 text-muted-foreground" />
+              <h2 className="text-lg font-semibold">Upcoming & Other</h2>
+              <span className="ml-auto text-xs bg-slate-100 text-muted-foreground px-2.5 py-0.5 rounded-full font-medium">
+                {upcomingTasks.length}
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {upcomingTasks.length > 0 ? (
+                upcomingTasks.map((task) => <TaskCard key={task.id} task={task} />)
+              ) : (
+                <div className="p-8 text-center bg-white/40 rounded-2xl border border-dashed border-border/80">
+                  <p className="text-sm text-muted-foreground">
+                    No upcoming tasks remaining.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
-    </section>
-  )
+    </div>
+  );
 }
-
-const styles = {
-  page: {
-    display: 'grid',
-    gap: '1.5rem',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '1rem',
-  },
-  headerIcon: {
-    width: '3rem',
-    height: '3rem',
-    borderRadius: '1rem',
-    display: 'grid',
-    placeItems: 'center',
-    background: 'hsl(var(--primary) / 0.15)',
-    color: 'hsl(var(--primary))',
-  },
-  title: {
-    margin: 0,
-    fontSize: '1.9rem',
-  },
-  subtitle: {
-    margin: '0.35rem 0 0',
-    color: 'hsl(var(--muted-foreground))',
-  },
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-    gap: '1.25rem',
-  },
-  card: {
-    background: 'hsl(var(--card))',
-    border: '1px solid hsl(var(--border))',
-    borderRadius: '1.25rem',
-    padding: '1.25rem',
-  },
-  cardTitle: {
-    margin: '0 0 1rem',
-    fontSize: '1.1rem',
-  },
-  list: {
-    display: 'grid',
-    gap: '0.75rem',
-  },
-  taskItem: {
-    width: '100%',
-    border: '1px solid hsl(var(--border))',
-    borderRadius: '1rem',
-    background: '#fff',
-    padding: '0.9rem 1rem',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.85rem',
-    textAlign: 'left',
-  },
-  taskDone: {
-    opacity: 0.8,
-  },
-  taskContent: {
-    display: 'grid',
-    gap: '0.15rem',
-  },
-  taskTitle: {
-    fontWeight: 600,
-  },
-  taskTitleDone: {
-    textDecoration: 'line-through',
-    color: 'hsl(var(--muted-foreground))',
-  },
-  taskMeta: {
-    fontSize: '0.9rem',
-    color: 'hsl(var(--muted-foreground))',
-  },
-  infoText: {
-    color: 'hsl(var(--muted-foreground))',
-  },
-}
-
-export default TasksPage

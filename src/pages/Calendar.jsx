@@ -9,7 +9,9 @@ import { format, startOfWeek, endOfWeek, eachDayOfInterval, addDays, isSameDay }
 import { Button } from "@/components/ui/button";
 
 export default function CalendarPage() {
-  const { isLoggedIn } = useAppLevelAuth();
+  const auth = useAppLevelAuth ? useAppLevelAuth() : {};
+  const isLoggedIn = auth?.isLoggedIn ?? true; // Default to true locally
+
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,17 +19,16 @@ export default function CalendarPage() {
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
 
   useEffect(() => {
-    if (!isLoggedIn) return;
     const fetchData = async () => {
       try {
         const [t, p] = await Promise.all([
-          Task.list("dueDate:asc"),
-          Project.list("deadline:asc")
+          Task.list("dueDate:asc").catch(() => []),
+          Project.list("deadline:asc").catch(() => [])
         ]);
         setTasks(t || []);
         setProjects(p || []);
       } catch (e) {
-        console.error(e);
+        console.error("Error fetching calendar data:", e);
       } finally {
         setLoading(false);
       }
@@ -35,7 +36,26 @@ export default function CalendarPage() {
     fetchData();
   }, [isLoggedIn]);
 
-  if (!isLoggedIn) return null;
+  // Handler to toggle task completion from calendar
+  const handleToggleTask = async (taskToToggle, e) => {
+    e.stopPropagation(); // Prevents event bubbling
+
+    const nextStatus = !taskToToggle.completed;
+
+    // 1. Optimistically update local React state
+    setTasks((currentTasks) =>
+      currentTasks.map((t) =>
+        t.id === taskToToggle.id ? { ...t, completed: nextStatus } : t
+      )
+    );
+
+    // 2. Persist to backend entity service
+    try {
+      await Task.update(taskToToggle.id, { completed: nextStatus });
+    } catch (error) {
+      console.error("Failed to update task status:", error);
+    }
+  };
 
   // Group everything by date
   const timeline = {};
@@ -47,91 +67,128 @@ export default function CalendarPage() {
     }
   });
 
-  projects.forEach(proj => {
-    if (proj.deadline) {
-      if (!timeline[proj.deadline]) timeline[proj.deadline] = [];
-      timeline[proj.deadline].push({ type: 'project', data: proj });
+  projects.forEach(project => {
+    if (project.deadline) {
+      if (!timeline[project.deadline]) timeline[project.deadline] = [];
+      timeline[project.deadline].push({ type: 'project', data: project });
     }
   });
 
   const sortedDates = Object.keys(timeline).sort();
 
-  // Week view logic
-  const daysInWeek = eachDayOfInterval({
+  // Helper for week view grid
+  const weekDays = eachDayOfInterval({
     start: currentWeekStart,
     end: endOfWeek(currentWeekStart, { weekStartsOn: 1 })
   });
 
+  const getItemColor = (item) => {
+    if (item.type === 'task') {
+      switch (item.data.category) {
+        case 'personal': return 'bg-pink-100 border-pink-300 text-pink-800';
+        case 'work': return 'bg-blue-100 border-blue-300 text-blue-800';
+        case 'education': return 'bg-yellow-100 border-yellow-300 text-yellow-800';
+        default: return 'bg-purple-100 border-purple-300 text-purple-800';
+      }
+    } else {
+      return 'bg-primary/10 border-primary text-primary font-semibold';
+    }
+  };
+
   return (
-    <div className="p-6 md:p-10 max-w-6xl mx-auto w-full space-y-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight text-foreground mb-2 flex items-center gap-3">
-            <CalendarDays className="h-8 w-8 text-primary" />
-            Life Calendar
-          </h1>
-          <p className="text-muted-foreground text-lg">Your unified schedule across all hubs.</p>
+          <h1 className="text-3xl font-bold tracking-tight">Schedule & Calendar</h1>
+          <p className="text-muted-foreground mt-1">Overview of your upcoming tasks and deadlines.</p>
         </div>
-        
-        <div className="flex bg-white/50 backdrop-blur-md rounded-xl p-1 shadow-sm border">
-          <Button 
-            variant={viewMode === "week" ? "default" : "ghost"} 
-            size="sm" 
+
+        <div className="flex items-center gap-2 bg-white/60 backdrop-blur-md p-1.5 rounded-2xl border border-white shadow-sm">
+          <Button
+            variant={viewMode === "week" ? "secondary" : "ghost"}
+            size="sm"
             onClick={() => setViewMode("week")}
-            className={viewMode === "week" ? "rounded-lg" : ""}
+            className="rounded-xl flex gap-2"
           >
-            <CalendarIcon className="w-4 h-4 mr-2" /> Weekly Grid
+            <CalendarIcon className="h-4 w-4" />
+            Week Grid
           </Button>
-          <Button 
-            variant={viewMode === "list" ? "default" : "ghost"} 
-            size="sm" 
-            onClick={() => setViewMode("list")}
-            className={viewMode === "list" ? "rounded-lg" : ""}
+          <Button
+            variant={viewMode === "timeline" ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setViewMode("timeline")}
+            className="rounded-xl flex gap-2"
           >
-            <LayoutList className="w-4 h-4 mr-2" /> Upcoming List
+            <LayoutList className="h-4 w-4" />
+            Timeline View
           </Button>
         </div>
       </div>
 
-      {viewMode === "week" ? (
-        <div className="space-y-4 pt-4">
-          <div className="flex items-center justify-between bg-white/70 backdrop-blur-md p-4 rounded-2xl shadow-sm border border-white">
-            <Button variant="outline" onClick={() => setCurrentWeekStart(addDays(currentWeekStart, -7))}>Prev Week</Button>
-            <h2 className="text-xl font-bold">{format(currentWeekStart, 'MMMM yyyy')}</h2>
-            <Button variant="outline" onClick={() => setCurrentWeekStart(addDays(currentWeekStart, 7))}>Next Week</Button>
+      {loading ? (
+        <div className="p-12 text-center text-muted-foreground">Loading calendar schedule...</div>
+      ) : viewMode === "week" ? (
+        /* WEEK GRID VIEW */
+        <div className="space-y-4">
+          <div className="flex justify-between items-center bg-white/40 p-3 rounded-2xl border border-white">
+            <Button variant="outline" size="sm" onClick={() => setCurrentWeekStart(addDays(currentWeekStart, -7))}>
+              &larr; Prev Week
+            </Button>
+            <span className="font-semibold text-sm">
+              {format(currentWeekStart, "MMM d")} - {format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), "MMM d, yyyy")}
+            </span>
+            <Button variant="outline" size="sm" onClick={() => setCurrentWeekStart(addDays(currentWeekStart, 7))}>
+              Next Week &rarr;
+            </Button>
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
-            {daysInWeek.map((day, idx) => {
-              const dateStr = format(day, 'yyyy-MM-dd');
+
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+            {weekDays.map((day) => {
+              const dateStr = format(day, "yyyy-MM-dd");
               const dayItems = timeline[dateStr] || [];
               const isToday = isSameDay(day, new Date());
-              
+
               return (
-                <div key={idx} className={`min-h-[200px] bg-white/70 backdrop-blur-md rounded-2xl p-4 border shadow-sm transition-all ${isToday ? 'border-primary ring-2 ring-primary/20' : 'border-white hover:shadow-md'}`}>
-                  <div className="flex flex-col items-center mb-4 pb-2 border-b">
-                    <span className="text-xs font-semibold text-muted-foreground uppercase">{format(day, 'EEE')}</span>
-                    <span className={`text-2xl font-bold ${isToday ? 'text-primary' : 'text-foreground'}`}>{format(day, 'd')}</span>
+                <div
+                  key={dateStr}
+                  className={`min-h-[140px] p-3 rounded-2xl border flex flex-col justify-start transition-all ${isToday ? "bg-primary/5 border-primary shadow-sm" : "bg-white/50 border-white/60"
+                    }`}
+                >
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-bold uppercase text-muted-foreground">
+                      {format(day, "EEE")}
+                    </span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${isToday ? "bg-primary text-white" : "text-foreground"
+                      }`}>
+                      {format(day, "d")}
+                    </span>
                   </div>
-                  
-                  <div className="space-y-2">
-                    {dayItems.map((item, i) => (
-                      <div key={i} className={`p-2 rounded-lg text-xs font-medium border ${
-                          item.type === 'task' 
-                            ? (item.data.category === 'personal' ? 'bg-pink-50 border-pink-100 text-pink-700' :
-                              item.data.category === 'work' ? 'bg-blue-50 border-blue-100 text-blue-700' :
-                              'bg-yellow-50 border-yellow-100 text-yellow-700')
-                            : 'bg-primary/10 border-primary/20 text-primary'
-                        }`}>
-                        <div className="flex items-start gap-1.5">
-                          {item.type === 'task' && (item.data.completed ? <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" /> : <Circle className="w-3.5 h-3.5 mt-0.5 shrink-0" />)}
-                          <span className="line-clamp-2">{item.data.title}</span>
+
+                  <div className="space-y-1.5 flex-1 overflow-y-auto max-h-[180px]">
+                    {dayItems.map((item, idx) => {
+                      const isTask = item.type === "task";
+                      const isCompleted = isTask && item.data.completed;
+
+                      return (
+                        <div
+                          key={idx}
+                          onClick={(e) => isTask && handleToggleTask(item.data, e)}
+                          className={`text-xs p-2 rounded-xl border flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition-all ${getItemColor(item)} ${isCompleted ? "opacity-60 line-through" : ""
+                            }`}
+                        >
+                          {isTask && (
+                            isCompleted ? (
+                              <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                            ) : (
+                              <Circle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            )
+                          )}
+                          <span className="truncate flex-1">
+                            {item.data.title}
+                          </span>
                         </div>
-                      </div>
-                    ))}
-                    {dayItems.length === 0 && (
-                      <div className="text-center text-xs text-muted-foreground pt-4">No plans</div>
-                    )}
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -139,59 +196,63 @@ export default function CalendarPage() {
           </div>
         </div>
       ) : (
-        <div className="space-y-12 mt-8">
-          {sortedDates.map((date, idx) => (
-            <div key={idx} className="relative pl-8 md:pl-0">
-              <div className="md:grid md:grid-cols-5 md:gap-8 items-start">
-                
-                {/* Date Column */}
-                <div className="md:col-span-1 mb-4 md:mb-0 sticky top-24">
-                  <div className="font-bold text-2xl text-foreground">
-                    {format(new Date(date + 'T00:00:00'), 'd')}
+        /* TIMELINE VIEW */
+        <div className="space-y-6">
+          {sortedDates.map(dateKey => (
+            <div key={dateKey} className="relative pl-6 md:pl-0">
+              <div className="md:grid md:grid-cols-4 md:gap-6 items-start">
+                <div className="mb-2 md:mb-0 md:text-right font-medium">
+                  <div className="text-lg font-bold">
+                    {format(new Date(dateKey + 'T00:00:00'), 'EEEE')}
                   </div>
-                  <div className="text-sm font-medium text-primary uppercase tracking-wider">
-                    {format(new Date(date + 'T00:00:00'), 'MMM yyyy')}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {format(new Date(date + 'T00:00:00'), 'EEEE')}
+                  <div className="text-sm text-muted-foreground">
+                    {format(new Date(dateKey + 'T00:00:00'), 'MMM d, yyyy')}
                   </div>
                 </div>
 
-                {/* Items Column */}
-                <div className="md:col-span-4 space-y-3">
-                  {timeline[date].map((item, i) => (
-                    <div key={i} className="bg-white/70 backdrop-blur-md p-4 rounded-2xl border border-white shadow-sm flex items-start gap-4 hover:shadow-md transition-shadow">
-                      
-                      {item.type === 'task' ? (
-                        <div className="mt-1">
-                          {item.data.completed ? <CheckCircle2 className="text-green-500 w-5 h-5"/> : <Circle className="text-muted-foreground w-5 h-5"/>}
-                        </div>
-                      ) : (
-                        <div className="mt-1 flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-xs">
-                          P
-                        </div>
-                      )}
+                <div className="md:col-span-3 space-y-3">
+                  {timeline[dateKey].map((item, idx) => {
+                    const isTask = item.type === "task";
+                    const isCompleted = isTask && item.data.completed;
 
-                      <div className="flex-1">
-                        <div className="font-semibold text-lg">{item.data.title}</div>
-                        <div className="flex gap-2 mt-2">
-                          <span className={`text-xs px-2 py-1 rounded-md font-medium capitalize ${
-                            item.data.category === 'personal' ? 'bg-pink-100 text-pink-700' :
-                            item.data.category === 'work' ? 'bg-blue-100 text-blue-700' :
-                            item.data.category === 'education' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-primary text-white' // Projects
-                          }`}>
-                            {item.type === 'task' ? item.data.category : 'Project / Exam'}
-                          </span>
+                    return (
+                      <div
+                        key={idx}
+                        onClick={(e) => isTask && handleToggleTask(item.data, e)}
+                        className={`p-4 rounded-2xl border bg-white/80 backdrop-blur-sm shadow-sm flex items-center justify-between transition-all cursor-pointer hover:border-primary/50 ${isCompleted ? "bg-gray-50/50 opacity-70" : ""
+                          }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          {isTask ? (
+                            isCompleted ? (
+                              <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                            ) : (
+                              <Circle className="h-5 w-5 text-muted-foreground shrink-0 hover:text-primary" />
+                            )
+                          ) : (
+                            <CalendarDays className="h-5 w-5 text-primary shrink-0" />
+                          )}
+                          <div>
+                            <div className={`font-semibold text-base ${isCompleted ? "line-through text-muted-foreground" : ""}`}>
+                              {item.data.title}
+                            </div>
+                            <div className="flex gap-2 mt-1">
+                              <span className={`text-xs px-2 py-0.5 rounded-md font-medium capitalize ${item.data.category === 'personal' ? 'bg-pink-100 text-pink-700' :
+                                  item.data.category === 'work' ? 'bg-blue-100 text-blue-700' :
+                                    item.data.category === 'education' ? 'bg-yellow-100 text-yellow-700' :
+                                      'bg-primary/20 text-primary'
+                                }`}>
+                                {isTask ? item.data.category : 'Project / Exam'}
+                              </span>
+                            </div>
+                          </div>
                         </div>
+
                       </div>
-
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
-                
               </div>
-              <div className="absolute left-0 top-2 bottom-[-3rem] w-px bg-border md:hidden" />
             </div>
           ))}
           {sortedDates.length === 0 && (

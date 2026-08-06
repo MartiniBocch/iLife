@@ -18,7 +18,7 @@ export default function CyclePage() {
   const [loading, setLoading] = useState(true);
 
   // Today's Form States
-  const [activeLogId, setActiveLogId] = useState<string | null>(null);
+  const [activeLogId, setActiveLogId] = useState(null);
   const [cyclePhase, setCyclePhase] = useState("none");
   const [cycleStart, setCycleStart] = useState(false);
   const [bleedingEnd, setBleedingEnd] = useState(false);
@@ -26,7 +26,6 @@ export default function CyclePage() {
   const [physicalSymptoms, setPhysicalSymptoms] = useState("");
 
   useEffect(() => {
-    if (!isLoggedIn) return;
     loadData();
   }, [isLoggedIn]);
 
@@ -71,8 +70,6 @@ export default function CyclePage() {
       toast.error("Failed to save data.");
     }
   };
-
-  if (!isLoggedIn) return null;
 
   return (
     <div className="p-6 md:p-10 max-w-5xl mx-auto w-full space-y-8">
